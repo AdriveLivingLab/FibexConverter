@@ -161,9 +161,11 @@ class BaseConfigurationFactory(object):
         return BaseInterface(name, vlanid, ips, sockets, input_frame_trigs, output_frame_trigs, fr_channel)
 
     def create_socket(self, name, ip, proto, portnumber,
-                      serviceinstances, serviceinstanceclients, eventhandlers, eventgroupreceivers):
+                      serviceinstances, serviceinstanceclients, eventhandlers, eventgroupreceivers
+                      ):
         return BaseSocket(name, ip, proto, portnumber,
-                          serviceinstances, serviceinstanceclients, eventhandlers, eventgroupreceivers)
+                          serviceinstances, serviceinstanceclients, eventhandlers, eventgroupreceivers
+                          )
 
     def create_someip_service_instance(self, service, instanceid, protover):
         return SOMEIPBaseServiceInstance(service, instanceid, protover)
@@ -263,9 +265,6 @@ class BaseConfigurationFactory(object):
     def create_multiplex_segment_position(self, bit_pos, is_high_low, bit_length):
         return BaseMultiplexPDUSegmentPosition(bit_pos, is_high_low, bit_length)
 
-    def create_ethernet_pdu_instance(self, pdu_ref, header_id):
-        return BaseEthernetPDUInstance(pdu_ref, header_id)
-
     def create_pdu_instance(self, id, pdu_ref, bit_position, is_high_low_byte_order, pdu_update_bit_position):
         return BasePDUInstance(id, pdu_ref, bit_position, is_high_low_byte_order, pdu_update_bit_position)
 
@@ -285,33 +284,20 @@ class BaseConfigurationFactory(object):
             return False
         return True
 
-    def add_ipv4_address_config(self, ip, netmask):
-        pass
-
-    def get_ipv4_netmask(self, ip):
-        return ""
-
-    def add_ipv6_address_config(self, ip, prefixlen):
-        pass
-
-    def get_ipv6_prefix_length(self, ip):
-        return ""
-
-    def parsing_done(self):
-        pass
 
 class BaseItem(object):
     def legacy(self):
         return False
 
 class BaseCoding(BaseItem):
-    def __init__(self, id, name, coded_basetype, coded_category, coded_termination, coded_bit_length, coded_max_length, compu_scale, compu_consts):
+    def __init__(self, id, name, coded_basetype, coded_category, coded_termination, coded_bit_length, coded_min_length, coded_max_length, compu_scale, compu_consts):
         self.__id__ = id
         self.__name__ = name
         self.__coded_basetype__ = coded_basetype
         self.__coded_category__ = coded_category
         self.__coded_termination__ = coded_termination
         self.__coded_bit_length__ = coded_bit_length
+        self.__coded_min_length__ = coded_min_length
         self.__coded_max_length__ = coded_max_length
         self.__compu_scale__ = compu_scale
         self.__compu_consts__ = compu_consts
@@ -741,8 +727,6 @@ class BaseSocket(BaseItem):
         self.__instanceclients__ = serviceinstanceclients
         self.__ehs__ = eventhandlers
         self.__cegs__ = eventgroupreceivers
-        self.__pdus_in__ = []
-        self.__pdus_out__ = []
         self.__interface__ = None
 
         if serviceinstances is not None:
@@ -806,20 +790,6 @@ class BaseSocket(BaseItem):
 
     def eventgroupreceivers(self):
         return self.__cegs__
-
-    def add_incoming_pdu(self, pdu):
-        if pdu not in self.__pdus_in__:
-            self.__pdus_in__.append(pdu)
-
-    def incoming_pdus(self):
-        return self.__pdus_in__
-
-    def add_outgoing_pdu(self, pdu):
-        if pdu not in self.__pdus_out__:
-            self.__pdus_out__.append(pdu)
-
-    def outgoing_pdus(self):
-        return self.__pdus_out__
 
     def set_interface(self, interface):
         self.__interface__ = interface
@@ -2070,29 +2040,6 @@ class BaseMultiplexPDUSegmentPosition(BaseItem):
     def bit_length(self):
         return self.__bit_length__
 
-
-class BaseEthernetPDUInstance(BaseItem):
-    def __init__(self, pdu_ref, header_id):
-        self.__pdu_ref__ = pdu_ref
-        self.__bit_position__ = 0
-        self.__header_id__ = header_id
-        self.__pdu_update_bit_position__ = None
-        self.__pdu__ = None
-
-    def add_pdu(self, pdu):
-        self.__pdu__ = pdu
-
-    def pdu(self):
-        return self.__pdu__
-
-    def bit_position(self):
-        return self.__bit_position__
-
-    def header_id(self):
-        return self.__header_id__
-
-    def pdu_update_bit_position(self):
-        return self.__pdu_update_bit_position__
 
 class BasePDUInstance(BaseItem):
     def __init__(self, id, pdu_ref, bit_position, is_high_low_byte_order, pdu_update_bit_position):

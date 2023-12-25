@@ -1,0 +1,12 @@
+<launch> 
+
+   <!-- parameters-->
+      <arg name="port_num_gw" default="19227" doc="Set when creating the project. Confirm with: ACT Tool -> Project -> Tools -> Bus configuration -> GenEthernet -> Edit bus settings" />
+         <!--    As specified in the ADMA setup, Format '1040'     -->
+      <arg name="ip_address_gw" default="169.254.200.123" doc="IP is written on the device, otherwise see IxAdmin or as a last measure can with Wireshark" />
+   <!-- start node -->
+      <node name="ixxat_gw_{{channel_name}}" type="ixxat_gw_{{channel_name}}" pkg="ixxat_gw_{{channel_name}}" output="screen">
+         <param name="~/port_num_gw"  type="string" value="$(arg port_num_gw)"/>
+         <param name="~/ip_address_gw" type="string" value="$(arg ip_address_gw)"/>
+      </node>
+</launch>

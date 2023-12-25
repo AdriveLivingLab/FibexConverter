@@ -21,12 +21,9 @@
 import xml.etree.ElementTree
 from abstract_parser import AbstractParser
 
-import importlib.util
-import sys
-import os
 
 class FibexParser(AbstractParser):
-    def __init__(self, plugin_file):
+    def __init__(self):
         super().__init__()
         self.__conf_factory__ = None
 
@@ -64,25 +61,6 @@ class FibexParser(AbstractParser):
         # FIBEX-ID -> (PSIS[], CSIS[], EH[], CEGS[])
         self.__aeps__ = dict()
 
-        # AEP-ID -> Socket
-        self.__sockets__ = dict()
-
-        self.__plugin__ = None
-        # Load plugin
-        if plugin_file is not None:
-            if not os.path.isfile(plugin_file):
-                print(f"Plugin {plugin_file} cannot be found!")
-                sys.exit(-1)
-
-            print(f"Loading plugin {plugin_file}")
-            module_name = "fibex_parser_plugin"
-            spec = importlib.util.spec_from_file_location(module_name, plugin_file)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module
-            spec.loader.exec_module(module)
-
-            self.__plugin__ = module
-
     def get_signal(self, signal_ref):
         for _, value in self.__signals__.items():
             if value.__id__ == signal_ref:
@@ -90,18 +68,13 @@ class FibexParser(AbstractParser):
 
         return None
 
-    def add_pdu(self, pdu):
-        self.__pdus__[pdu.id()] = pdu
-
     def get_pdu(self, pdu_ref):
-        return self.__pdus__.get(pdu_ref)
+        for _, value in self.__pdus__.items():
+            if value.__id__ == pdu_ref:
+                return value
 
-    def add_socket(self, aep_id, socket):
-        self.__sockets__[aep_id] = socket
-
-    def get_socket_by_aep_id(self, aep_id):
-        return self.__sockets__.get(aep_id)
-
+        return None
+    
     def get_id(self, element):
         return self.get_attribute(element, 'ID')
 
@@ -237,6 +210,8 @@ class FibexParser(AbstractParser):
              'MaxLength': coded_max_length,
              'CompuScale': compu_scale,
              'CompuConsts': compu_consts}
+
+        ret = self.__conf_factory__.create_coding(id, name, coded_basetype, coded_category, coded_termination, coded_bit_length, coded_min_length, coded_max_length, compu_scale, compu_consts)
         return d
 
     def parse_codings(self, root):
@@ -305,7 +280,7 @@ class FibexParser(AbstractParser):
                                             self.__ns__):
             switch_code = self.get_child_text(switched_pdu, './fx:SWITCH-CODE')
             pdu_ref = self.get_child_attribute(switched_pdu, './fx:PDU-REF', 'ID-REF')
-            pdus[int(switch_code)] = self.get_pdu(pdu_ref)
+            pdus[int(switch_code)] = self.__pdus__.get(pdu_ref, None)
 
         # static segment positions
         static_segs = []
@@ -337,11 +312,11 @@ class FibexParser(AbstractParser):
                 signal_instances[si.__id__] = si
 
         ret = self.__conf_factory__.create_pdu(id, short_name, byte_length, pdu_type, signal_instances)
-        self.add_pdu(ret)
+        self.__pdus__[short_name] = ret
         return ret
 
     def parse_multiplex_pdu(self, element, verbose):
-        pdu_id = self.get_id(element)
+        id = self.get_id(element)
         short_name = self.get_child_text(element, 'ho:SHORT-NAME')
         byte_length = int(self.get_child_text(element, 'fx:BYTE-LENGTH'))
         pdu_type = self.get_child_text(element, 'fx:PDU-TYPE')
@@ -353,26 +328,28 @@ class FibexParser(AbstractParser):
 
         switch, seg_pos, pdu_instances, static_segs, static_pdu_id = self.parse_multiplexer(multiplexer)
 
-        static_pdu = self.get_pdu(static_pdu_id)
-        ret = self.__conf_factory__.create_multiplex_pdu(pdu_id, short_name, byte_length, pdu_type,
+        static_pdu = self.__pdus__.get(static_pdu_id, None)
+        ret = self.__conf_factory__.create_multiplex_pdu(id, short_name, byte_length, pdu_type,
                                                          switch, seg_pos, pdu_instances, static_segs, static_pdu)
 
-        self.add_pdu(ret)
+        self.__pdus__[short_name] = ret
         return ret
 
     def parse_pdus(self, root, verbose):
-        # first pass without MULTIPLEXER
-        for pdu in root.findall('.//fx:PDUS/fx:PDU', self.__ns__):
-            if pdu.find('./fx:MULTIPLEXER', self.__ns__) is None:
-                p = self.parse_signal_pdu(pdu, verbose)
-                if p is not None:
-                    self.add_pdu(p)
+        for pdu in root.findall('.//fx:PDUS/fx:PDU/fx:SIGNAL-INSTANCES/..', self.__ns__):
+            p = self.parse_signal_pdu(pdu, verbose)
+            if p is not None:
+                self.__pdus__[p.id()] = p
 
-        # second pass MULTIPLEXER only, since static PDUs need to already be parsed
         for pdu in root.findall('.//fx:PDUS/fx:PDU/fx:MULTIPLEXER/..', self.__ns__):
             p = self.parse_multiplex_pdu(pdu, verbose)
             if p is not None:
-                self.add_pdu(p)
+                self.__pdus__[p.id()] = p
+
+        if p is None:
+            p = self.parse_signal_pdu(pdu, verbose)
+            if p is not None:
+                self.__pdus__[p.id()] = p
 
     def parse_pdu_instance(self, element):
         id = self.get_id(element)
@@ -442,14 +419,11 @@ class FibexParser(AbstractParser):
         pdu_instances = dict()
         for pdu_instance in element.findall('./fx:PDU-INSTANCES/fx:PDU-INSTANCE', self.__ns__):
             pi = self.parse_pdu_instance(pdu_instance)
+            pi.add_pdu(self.get_pdu(pi.__pdu_ref__))
             if pi is not None:
-                pdu = self.get_pdu(pi.__pdu_ref__)
-                if pdu is None:
-                    print(f"ERROR: Frame {short_name} references unknown PDU {pi.__pdu_ref__}!")
-                else:
-                    pi.add_pdu(pdu)
-
                 pdu_instances[pi.__id__] = pi
+            else:
+                print(f"PDU Instance None found for Frame {id}")
 
         ret = self.__conf_factory__.create_frame(id, short_name, byte_length, frame_type, pdu_instances)
         return ret
@@ -1069,9 +1043,6 @@ class FibexParser(AbstractParser):
                 ip["addrsrc"] = self.get_child_text(i, "it:IPV4-ADDRESS-SOURCE")
                 ip["netmask"] = self.get_child_text(i, "it:NETWORKMASK")
                 ipsv4 += [ip]
-
-                if ip["addr"] is not None and ip["netmask"] is not None:
-                    self.__conf_factory__.add_ipv4_address_config(ip["addr"], ip["netmask"] )
             nep["ipsv4"] = ipsv4
 
             ipsv6 = []
@@ -1079,11 +1050,8 @@ class FibexParser(AbstractParser):
                 ip = dict()
                 ip["addr"] = self.get_child_text(i, "it:IPV6-ADDRESS")
                 ip["addrsrc"] = self.get_child_text(i, "it:IPV6-ADDRESS-SOURCE")
-                ip["prefixlen"] = self.get_child_text(i, "it:IP-ADDRESS-PREFIX-LENGTH")
+                ip["netmask"] = self.get_child_text(i, "it:IPV6-ADDRESS-PREFIX-LENGTH")
                 ipsv6 += [ip]
-
-                if ip["addr"] is not None and ip["prefixlen"] is not None:
-                    self.__conf_factory__.add_ipv6_address_config(ip["addr"], ip["prefixlen"] )
             nep["ipsv6"] = ipsv6
 
             neps[nep["id"]] = nep
@@ -1288,55 +1256,61 @@ class FibexParser(AbstractParser):
 
                     if aep_id in self.__aeps__:
                         sis, csis, ehs, cegs = self.__aeps__[aep_id]
-                    else:
-                        sis, csis, ehs, cegs = [], [], [], []
 
-                    aep_name = self.get_child_text(aep, 'it:MANUFACTURER-EXTENSION/ho:SHORT-NAME')
-                    nepref = self.get_child_attribute(aep, 'it:NETWORK-ENDPOINT-REF', 'ID-REF')
+                        aep_name = self.get_child_text(aep, 'it:MANUFACTURER-EXTENSION/ho:SHORT-NAME')
+                        nepref = self.get_child_attribute(aep, 'it:NETWORK-ENDPOINT-REF', 'ID-REF')
 
-                    if nepref in neps:
-                        nep = neps[nepref]
-                    else:
-                        nep = None
-                        print("ERROR in FIBEX: I cannot find NEP %s" % nepref)
-
-                    ips = []
-                    if "ipsv4" in nep:
-                        for ip in nep["ipsv4"]:
-                            ips += [ip["addr"]]
-                    if "ipsv6" in nep:
-                        for ip in nep["ipsv6"]:
-                            ips += [ip["addr"]]
-
-                    udpport = self.get_child_text(aep, 'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:UDP-TP/'
-                                                       'it:UDP-PORT/it:PORT-NUMBER')
-                    if udpport is None and self.get_child_text(aep, 'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:UDP-TP/'
-                                                                    'it:UDP-PORT/it:DYNAMICALLY-ASSIGNED') == "true":
-                        udpport = self.lookup_dyn_port(aep_name)
-
-                    tcpport = self.get_child_text(aep, 'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:TCP-TP/'
-                                                       'it:TCP-PORT/it:PORT-NUMBER')
-                    if tcpport is None and self.get_child_text(aep, 'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:TCP-TP/'
-                                                                    'it:TCP-PORT/it:DYNAMICALLY-ASSIGNED') == "true":
-                        tcpport = self.lookup_dyn_port(aep_name)
-
-                    # only one can be existing
-                    assert (udpport is None or tcpport is None)
-
-                    if udpport is not None or tcpport is not None:
-                        if udpport is not None:
-                            portnumber = udpport
-                            proto = "udp"
+                        if nepref in neps:
+                            nep = neps[nepref]
                         else:
-                            portnumber = tcpport
-                            proto = "tcp"
+                            nep = None
+                            print("ERROR in FIBEX: I cannot find NEP %s" % nepref)
 
-                        # build sockets
-                        for ip in ips:
-                            socket = self.__conf_factory__.create_socket(aep_name, ip, proto, portnumber, sis, csis,
-                                                                         ehs, cegs)
-                            sockets += [socket]
-                            self.add_socket(aep_id, socket)
+                        ips = []
+                        if "ipsv4" in nep:
+                            for ip in nep["ipsv4"]:
+                                ips += [ip["addr"]]
+                        if "ipsv6" in nep:
+                            for ip in nep["ipsv6"]:
+                                ips += [ip["addr"]]
+
+                        udpport = self.get_child_text(
+                            aep,
+                            'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:UDP-TP/it:UDP-PORT/it:PORT-NUMBER'
+                        )
+                        if udpport is None and self.get_child_text(
+                                aep,
+                                'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:UDP-TP/it:UDP-PORT/it:DYNAMICALLY-ASSIGNED'
+                        ) == "true":
+                            udpport = self.lookup_dyn_port(aep_name)
+
+                        tcpport = self.get_child_text(
+                            aep,
+                            'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:TCP-TP/it:TCP-PORT/it:PORT-NUMBER'
+                        )
+                        if tcpport is None and self.get_child_text(
+                                aep,
+                                'it:IT-TRANSPORT-PROTOCOL-CONFIGURATION/it:TCP-TP/it:TCP-PORT/it:DYNAMICALLY-ASSIGNED'
+                        ) == "true":
+                            tcpport = self.lookup_dyn_port(aep_name)
+
+                        # only one can be existing
+                        assert (udpport is None or tcpport is None)
+
+                        if udpport is not None or tcpport is not None:
+
+                            if udpport is not None:
+                                portnumber = udpport
+                                proto = "udp"
+                            else:
+                                portnumber = tcpport
+                                proto = "tcp"
+
+                            # build sockets
+                            for ip in ips:
+                                socket = self.__conf_factory__.create_socket(aep_name, ip, proto, portnumber, sis, csis,
+                                                                             ehs, cegs)
+                                sockets += [socket]
 
                 # build interfaces
                 if channel is not None:
@@ -1404,13 +1378,10 @@ class FibexParser(AbstractParser):
                     channel_ref = self.get_child_attribute(v, "fx:CHANNEL-REF", "ID-REF")
                     channel_ref_name = (self.__channels__.get(channel_ref, {})).get("name", "")
                     default_prio = self.get_child_text(v, "ethernet:DEFAULT-PRIORITY/fx:PRIORITY")
-                    default_prio = 0 if default_prio is None else int(default_prio)
-
                     if verbose:
                         print(f"    VLAN Channel:{channel_ref} ({channel_ref_name}) Default-Prio:{default_prio}")
 
                     channel = self.__channels__.get(channel_ref, {})
-                    channel["vlanid"] = None if channel.get("vlanid", None) is None else int(channel["vlanid"])
                     vlans.append(self.__conf_factory__.create_vlan(channel["name"], channel["vlanid"], default_prio))
 
                 tmp = self.__conf_factory__.create_switch_port(coupling_port_id, controller, coupling_port,
@@ -1466,8 +1437,6 @@ class FibexParser(AbstractParser):
             print("*** Parsing PDUs ***")
         self.parse_pdus(root, verbose)
         if verbose:
-            for k, v in self.__pdus__.items():
-                print(f"{k}: {v}")
             print("")
 
         if verbose:
@@ -1494,9 +1463,6 @@ class FibexParser(AbstractParser):
         if verbose:
             print("")
 
-        if self.__plugin__ is not None:
-            plugin = self.__plugin__.FibexParserPlugin()
-            plugin.parse_file(self, conf_factory, filename, verbose=verbose)
 
 
 def main():

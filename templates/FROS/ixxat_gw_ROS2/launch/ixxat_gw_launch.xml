@@ -1,0 +1,12 @@
+<launch> 
+
+   <!-- parameters-->
+      <arg name="port_num_gw" default="19227"/>
+         <!--    As specified in the ADMA setup, Format '1040'     -->
+      <arg name="ip_address_gw" default="169.254.200.123"/>
+   <!-- start node -->
+      <node pkg="ixxat_gw_{{channel_name}}" exec="ixxat_gw_{{channel_name}}" name="ixxat_gw_{{channel_name}}" namespace="ixxat_gw_{{channel_name}}">
+         <param name="~/port_num_gw"  type="string" value="$(var port_num_gw)"/>
+         <param name="~/ip_address_gw" type="string" value="$(var ip_address_gw)"/>
+      </node>
+</launch>
