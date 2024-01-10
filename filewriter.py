@@ -135,8 +135,6 @@ class FileWriter():
             elif length <=64-1:
                 return "float64"
             
-        #print(f"No signal number format found for coding {coding.__name__}")
-        #return number_format
 
     def get_frametriggering(self, conf_factory, frame_name):
         for _, value in conf_factory.__frame_triggerings__.items():
@@ -191,13 +189,6 @@ class FileWriter():
             signal_list = dict()
             for signal_instance_name, signal_instance in pdu.__signal_instances__.items():
                 signal_name = signal_instance.__signal__.__name__ # Proper signal name
-                #coding = self.get_from_dict_or_none(conf_factory.__codings__, signal_name)
-                #coding = conf_factory.get_coding(signal_instance.__signal__.__coding_ref__)
-                #if signal_instance.__signal__.__compu_scale__ is None:
-                #    print(f"Couldnt find signal coding for signal {signal_name} with signal instance {signal_instance_name}")
-                #    continue
-                if signal_name == 'ACC_Sollbeschleunigung_02':
-                    print()
                 type = self.get_phys_signal_format(signal_instance.__signal__.__compu_scale__, signal_instance.__signal__.__bit_length__)
                 signal_list[signal_name] = type
    
