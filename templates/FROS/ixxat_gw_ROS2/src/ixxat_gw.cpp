@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   boost::asio::io_service io_service;
   const rclcpp::NodeOptions options;
 
-  auto node = std::make_shared<ixxat_gw_mlbevo_flexray::DataHandler>(io_service);
+  auto node = std::make_shared<ixxat_gw_{{channel_name}}::DataHandler>(io_service);
   node->SetRosNodeAndAdvertise();
   node->EstablishConnection();
   

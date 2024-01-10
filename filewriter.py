@@ -3,6 +3,7 @@ import time
 import configuration_to_fros
 from jinja2 import Environment, FileSystemLoader
 import re
+import copy
 
 class FileWriter():
     def __init__(self, filename, channel_name):
@@ -91,8 +92,8 @@ class FileWriter():
         is_simple_sig = False
 
         try:
-            factor = coding.__compu_scale__[1]
-            offset = coding.__compu_scale__[0]
+            factor = coding[1]
+            offset = coding[0]
             if factor >= 0 and offset >= 0:
                 is_positive_sig = True #simplest form of signal
             else:
@@ -195,6 +196,8 @@ class FileWriter():
                 #if signal_instance.__signal__.__compu_scale__ is None:
                 #    print(f"Couldnt find signal coding for signal {signal_name} with signal instance {signal_instance_name}")
                 #    continue
+                if signal_name == 'ACC_Sollbeschleunigung_02':
+                    print()
                 type = self.get_phys_signal_format(signal_instance.__signal__.__compu_scale__, signal_instance.__signal__.__bit_length__)
                 signal_list[signal_name] = type
    
@@ -359,9 +362,12 @@ class FileWriter():
         content = template.render(pdudefs = pdudefs)
         filename = "ROS1\\" + self.packagefolder + f"\\include\\msgdefs.h"
         self.write_content_to_file(filename, content)
+        
         #Write ROS2
         ros2_pdudefs = {}
-        for pdu_name, pdu in pdudefs.items():
+        pdudefs_temp = copy.copy(pdudefs)
+        
+        for pdu_name, pdu in pdudefs_temp.items():
             pdu["name"] = re.sub(r"(_|-)+", " ", pdu_name).title().replace(" ", "").lower()
             ros2_pdudefs[pdu["name"]] = pdu
         
@@ -429,9 +435,11 @@ class FileWriter():
         content = template.render(pdudefs = pdudefs, channel_name = self.channel_name.lower())
         filename = "ROS1\\" + self.packagefolder + f"\\include\\pdudefs.h"
         self.write_content_to_file(filename, content)
+        
         #Write ROS2
         ros2_pdudefs = {}
-        for pdu_name, pdu in pdudefs.items():
+        pdudefs_temp = copy.copy(pdudefs)
+        for pdu_name, pdu in pdudefs_temp.items():
             pdu["name"] = re.sub(r"(_|-)+", " ", pdu_name).title().replace(" ", "").capitalize()
             ros2_pdudefs[pdu["name"]] = pdu
 
@@ -552,7 +560,7 @@ class FileWriter():
         environment = Environment(loader=FileSystemLoader("templates/FROS/ixxat_gw/src/"), trim_blocks=True, lstrip_blocks=True)
         template = environment.get_template("datahandler.h")
         content = template.render(framedefs = framedefs, list_of_pdus=unique_list_of_pdus, pdudefs=pdudefs, list_of_publishers=unique_list_of_publishers, fnktpntr_array=fnktpntr_array.tolist(), channel_name = self.channel_name.lower())
-        filename = "ROS2\\" + self.packagefolder + f"\\src\\datahandler.h"
+        filename = "ROS1\\" + self.packagefolder + f"\\src\\datahandler.h"
         self.write_content_to_file(filename, content)
         
         #Write ROS2
@@ -598,7 +606,7 @@ class FileWriter():
         environment = Environment(loader=FileSystemLoader("templates/FROS/ixxat_gw_ROS2/src/"), trim_blocks=True, lstrip_blocks=True)
         template = environment.get_template("datahandler.cpp")
         content = template.render(framedefs = ros2_framedefs, list_of_publishers=ros2_unique_list_of_publishers, pdudefs=ros2_pdudefs, muxpdudefs=ros2_muxpdudefs,  fnktpntr_array=fnktpntr_array.tolist(), channel_name = self.channel_name.lower())
-        filename = "ROS1\\" + self.packagefolder + f"\\src\\datahandler.cpp"
+        filename = "ROS2\\" + self.packagefolder + f"\\src\\datahandler.cpp"
         self.write_content_to_file(filename, content)
     
         # Datahandler.h

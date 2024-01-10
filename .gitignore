@@ -1,3 +1,13 @@
+# Added for fROS
+*.msg
+output/
+*.bag
+*.xml
+*.h
+*.cpp
+*.txt
+*/*
+
 # PyCharm
 .idea/
 
